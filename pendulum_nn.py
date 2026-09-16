@@ -149,6 +149,74 @@ def rollout_model(model, theta0, omega0, steps=999, dt=0.01):
 
     return np.array(trajectory)
 
+# ============================================================================
+# ENERGY DRIFT QUANTIFICATION
+# ============================================================================
+
+def compute_energy(trajectory, g=9.81, L=1.0):
+    """
+    Compute total mechanical energy (kinetic + potential) for a pendulum.
+    
+    Energy = (1/2) * m * L^2 * omega^2 + m * g * L * (1 - cos(theta))
+    
+    Since m and L are constant, we normalize by m*L^2:
+    E_normalized = (1/2) * omega^2 + (g/L) * (1 - cos(theta))
+    
+    Args:
+        trajectory: (N, 2) array where each row is [theta, omega]
+        g: gravitational constant
+        L: pendulum length
+    
+    Returns:
+        energy: (N,) array of normalized total energy at each timestep
+    """
+    theta = trajectory[:, 0]
+    omega = trajectory[:, 1]
+    
+    kinetic = 0.5 * omega**2
+    potential = (g / L) * (1 - np.cos(theta))
+    
+    return kinetic + potential
+
+def compute_energy_drift(true_energy, pred_energy):
+    """
+    Compute energy drift metrics.
+    
+    Args:
+        true_energy: (N,) array of true energy values
+        pred_energy: (N,) array of predicted energy values
+    
+    Returns:
+        dict with drift metrics
+    """
+    # Initial energy
+    E0_true = true_energy[0]
+    
+    # Absolute energy error
+    energy_error = np.abs(pred_energy - true_energy)
+    
+    # Relative energy error
+    relative_energy_error = energy_error / np.abs(E0_true)
+    
+    # Energy drift (change from initial)
+    true_drift = np.abs(true_energy - E0_true)
+    pred_drift = np.abs(pred_energy - E0_true)
+    
+    # Mean and max metrics
+    metrics = {
+        'initial_energy': E0_true,
+        'mean_energy_error': np.mean(energy_error),
+        'max_energy_error': np.max(energy_error),
+        'mean_relative_error': np.mean(relative_energy_error),
+        'max_relative_error': np.max(relative_energy_error),
+        'true_energy_drift': true_drift,
+        'pred_energy_drift': pred_drift,
+        'true_energy': true_energy,
+        'pred_energy': pred_energy,
+    }
+    
+    return metrics
+
 # Compare on a NEW starting condition (not seen in training)
 theta0_test = np.radians(60)
 omega0_test = 0.0
@@ -156,6 +224,24 @@ omega0_test = 0.0
 true_traj = simulate(theta0_test, omega0_test)
 pred_traj = rollout_model(model, theta0_test, omega0_test)
 
+# Compute energy for both trajectories
+true_energy = compute_energy(true_traj)
+pred_energy = compute_energy(pred_traj)
+
+# Get energy drift metrics
+drift_metrics = compute_energy_drift(true_energy, pred_energy)
+
+print("\n" + "="*60)
+print("ENERGY DRIFT ANALYSIS")
+print("="*60)
+print(f"Initial energy: {drift_metrics['initial_energy']:.6f}")
+print(f"Mean energy error: {drift_metrics['mean_energy_error']:.8f}")
+print(f"Max energy error: {drift_metrics['max_energy_error']:.8f}")
+print(f"Mean relative error: {drift_metrics['mean_relative_error']:.6%}")
+print(f"Max relative error: {drift_metrics['max_relative_error']:.6%}")
+print("="*60 + "\n")
+
+# Plot 1: Trajectory comparison (original)
 t = np.linspace(0, 10, len(true_traj))
 
 plt.figure(figsize=(12, 5))
@@ -167,4 +253,38 @@ plt.title("True physics vs Neural network — full rollout")
 plt.legend()
 plt.grid(True)
 plt.savefig("rollout_comparison.png")
+plt.show()
+
+# Plot 2: Energy over time
+plt.figure(figsize=(12, 5))
+plt.plot(t, drift_metrics['true_energy'], label="True energy", linewidth=2)
+plt.plot(t, drift_metrics['pred_energy'], label="NN predicted energy", linestyle="--", linewidth=2)
+plt.xlabel("Time (s)")
+plt.ylabel("Total Energy (normalized)")
+plt.title("Energy Conservation: True Physics vs Neural Network")
+plt.legend()
+plt.grid(True)
+plt.savefig("energy_comparison.png")
+plt.show()
+
+# Plot 3: Energy error over time
+plt.figure(figsize=(12, 5))
+energy_error = np.abs(drift_metrics['pred_energy'] - drift_metrics['true_energy'])
+plt.semilogy(t, energy_error, linewidth=2, color='red')
+plt.xlabel("Time (s)")
+plt.ylabel("Absolute Energy Error (log scale)")
+plt.title("Energy Error Accumulation Over Time")
+plt.grid(True, which='both', alpha=0.3)
+plt.savefig("energy_error.png")
+plt.show()
+
+# Plot 4: Relative energy error over time
+plt.figure(figsize=(12, 5))
+relative_error = np.abs(drift_metrics['pred_energy'] - drift_metrics['true_energy']) / np.abs(drift_metrics['initial_energy'])
+plt.semilogy(t, relative_error, linewidth=2, color='orange')
+plt.xlabel("Time (s)")
+plt.ylabel("Relative Energy Error (log scale)")
+plt.title("Relative Energy Error Over Time")
+plt.grid(True, which='both', alpha=0.3)
+plt.savefig("relative_energy_error.png")
 plt.show()
