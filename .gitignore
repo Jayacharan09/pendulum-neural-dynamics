@@ -1,0 +1,22 @@
+*.pyc
+__pycache__/
+*.egg-info/
+.DS_Store
+.ipynb_checkpoints/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Generated plots (run generate_plots.py to create)
+energy_comparison.png
+energy_error.png
+relative_energy_error.png
+training_loss_comparison.png
+trajectory_comparison_ham_vs_std.png
+energy_conservation_comparison.png
+energy_error_comparison.png
+relative_energy_error_comparison.png
+phase_space_comparison.png
